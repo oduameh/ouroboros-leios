@@ -4,86 +4,103 @@ sidebar_position: 3
 
 # How it works
 
-Leios is a high-throughput overlay protocol designed to enhance blockchain scalability—such as for Cardano’s Ouroboros—by managing a structured flow of transactions.
+Leios is a high-throughput overlay protocol designed to enhance blockchain scalability—such as for Cardano’s Ouroboros—by managing a structured flow of transactions. Here’s a breakdown of how it operates:
 
-## Key stages
+1. **Creating Input Blocks (IBs)**<br /> Stake pool operators (SPOs), acting as
+   validators, bundle transactions into Input Blocks (IBs) every 0.2–2 seconds
+   and broadcast them across the network for parallel processing.
 
-1. **Creating Input Blocks (IBs)**  
-   Stake pool operators (SPOs), acting as validators, bundle transactions into input blocks every 0.2–2 seconds. These IBs are broadcast across the network for parallel processing.
+2. **Proofs of data availability** <br /> Validators check that IBs’ transaction
+   data is valid and accessible, a process later confirmed through Endorser
+   Blocks (EBs) and voting, ensuring no data is missing or malformed.
 
-2. **Proofs of data availability**  
-   Validators check that IBs contain valid and accessible transaction data. This is later confirmed via endorser blocks (EBs) and a voting mechanism, ensuring no data is missing or malformed.
+3. **Generating Endorser Blocks (EBs)**<br /> EBs aggregate multiple verified
+   IBs, grouping them for validation and proposing their inclusion in the
+   blockchain’s final ledger.
 
-3. **Generating Endorser Blocks (EBs)**  
-   EBs aggregate multiple verified IBs, grouping them for validation and proposing their inclusion in the blockchain’s final ledger.
+4. **Pipelined processing**<br /> The protocol uses a seven-stage endorsing
+   pipeline (detailed below) to process IBs, EBs, and votes in parallel,
+   maximizing network bandwidth and throughput.
 
-4. **Pipelined processing**  
-   The protocol uses a seven-stage endorsing pipeline (explained below) to process IBs, EBs, and votes in parallel—maximizing throughput and bandwidth efficiency.
+5. **Voting and certification**<br /> Validators vote on EBs using
+   stake-weighted BLS signatures to certify their correctness and data
+   availability, ensuring only compliant IBs (e.g., valid scripts) proceed.
 
-5. **Voting and certification**  
-   Validators use stake-weighted BLS signatures to vote on EBs. This certifies both their correctness and data availability, allowing only compliant IBs to proceed.
-
-6. **Final inclusion in the blockchain**  
-   Certified EBs are referenced by a certificate included in a ranking block (RB)—a Praos-style block minted roughly every 20 seconds. These RBs finalize transactions on-chain, preserving both efficiency and auditability.
+6. **Final inclusion in the blockchain**<br /> Certified EBs are referenced by
+   a certificate included in a Ranking Block (RB)—a Praos-style block minted
+   every ~20 seconds—finalizing IB transactions on the blockchain while
+   maintaining a verifiable, efficient record.
 
 ## Leios architecture
 
 Leios uses a pipelined architecture to achieve high throughput. Each pipeline instance includes the following seven stages:
 
-### 1. Propose
+1. **Propose**:<br />
 
-- Validators propose IBs containing transaction data.
-- Proposals target frequent output (every 0.2–2 seconds).
-- These IBs initiate the current pipeline instance.
+   - Validators concurrently generate and propose IBs with transaction data,
+     kicking off the pipeline instance and targeting frequent output (e.g.,
+     every 0.2–2 seconds).
+   - IBs proposed during this stage are the focus of the current pipeline
+     instance.
 
-### 2. Deliver1
+2. **Deliver1**:<br />
 
-- IBs are disseminated across the network using a freshest-first strategy.
-- This ensures that honest nodes receive IBs within a bounded delay (e.g., Δₕᵈᵣ), even during adversarial message bursts.
+   - Time is allocated for proposed IBs to spread across the network using a
+     freshest-first diffusion strategy, ensuring honest nodes receive them
+     within a set delay (e.g., Δ_hdr) despite potential adversarial bursts.
+   - Duration is crucial for ensuring all honest nodes receive IBs before the
+     next stage.
 
-### 3. Link
+3. **Link**:<br />
 
-- Validators create EBs that reference the proposed IBs.
-- EBs group and order IBs for validation and inclusion.
+   - Validators create EBs that reference Propose-stage IBs, grouping and
+     ordering them for validation and eventual blockchain inclusion.
+   - EBs serve as containers for grouping and ordering IBs.
 
-### 4. Deliver2
+4. **Deliver2**:<br />
 
-- Additional time is allocated for any adversarial IBs to propagate.
-- Ensures all honest nodes have the necessary data before voting.
+   - Time is allocated for any adversarial IBs referenced by EBs to disseminate,
+     ensuring honest nodes have all data needed for fair voting and availability
+     checks.
+   - Ensures honest nodes have received all relevant IBs before casting votes.
 
-### 5. Vote1
+5. **Vote1**:<br />
 
-- Validators vote using stake-weighted BLS signatures on EBs from the link stage.
-- EBs become vote1-certified once a threshold of signatures is reached.
+   - Validators cast stake-weighted votes (via BLS signatures) for EBs from the
+     Link stage, certifying them as Vote1-certified if enough votes confirm
+     their IBs’ validity and availability.
 
-### 6. Endorse
+6. **Endorse**:<br />
 
-- New EBs reference vote1-certified EBs across pipeline instances.
-- This reinforces confirmation and supports high throughput.
+   - New EBs reference Vote1-certified EBs, linking across pipeline instances to
+     reinforce IB confirmation and ensure high throughput by cross-referencing
+     honest data.
+   - Strengthens overall confirmation of IBs.
 
-### 7. Vote2
-
-- Validators cast final votes on EBs from the endorse stage.
-- EBs are vote2-certified if they reference a majority of vote1-certified EBs and are ready for RB inclusion and ledger finality.
-
+7. **Vote2**:<br />
+   - Validators cast final votes for Endorse-stage EBs, certifying them as
+     Vote2-certified if they reference a majority of Vote1-certified EBs,
+     preparing them for RB inclusion and ledger finality.
+   - Must reference a majority of Vote1-certified EBs.
 
 ## Network resilience
 
-Leios addresses adversarial tactics with:
+Leios counters adversarial tactics with:
 
-- **Freshest-first diffusion**  
-  Nodes prioritize receiving the most recent IBs and EBs based on VRF-based timestamps. This limits delays from adversarial bursts.
-
-- **Equivocation proofs**  
-  If a validator double-signs (e.g., sends conflicting EBs), honest nodes detect and broadcast proofs. This ensures only one valid block per slot is processed, preserving bandwidth.
+- **Freshest-first diffusion**: Nodes prioritize downloading the newest IBs and
+  EBs (via VRF-based timestamps), limiting delays from malicious message bursts.
+- **Equivocation proofs**: If a validator double-signs (e.g., sends conflicting
+  EBs), honest nodes detect and propagate proofs, ensuring only one valid block
+  per slot is processed, minimizing bandwidth waste.
 
 ## Integration with Ouroboros
 
-Leios enhances [Ouroboros Praos](https://iohk.io/en/research/library/papers/ouroboros-praos-an-adaptively-secure-version-of-ou/) by overlaying its Ranking Blocks (RBs) with high-throughput IB and EB processing:
+- Leios enhances Ouroboros Praos by overlaying its Ranking Blocks (RBs) with
+  high-throughput IB and EB processing. RBs, minted every ~20 seconds, anchor
+  the ledger’s security, while Leios’ pipeline scales transaction capacity
+  without altering Praos’ core settlement guarantees.
 
-- RBs are minted every ~20 seconds and anchor ledger security.
-- The Leios pipeline enables continuous IB generation and certification without altering Praos' core settlement guarantees.
-
----
-
-By combining pipelined architecture with parallel processing and robust confirmation, Leios achieves near-optimal throughput (For example, up to (1−δ) of network capacity) while resisting adversarial strategies such as message flooding and equivocation.
+This pipelined architecture ensures continuous IB generation, parallel
+processing, and robust confirmation, enabling Leios to achieve near-optimal
+transaction throughput (e.g., (1-δ) of network capacity) while resisting
+adversarial tactics like message bursts and equivocations.
